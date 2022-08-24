@@ -1,0 +1,57 @@
+
+plugins {
+    id 'maven-publish'
+}
+
+apply plugin: 'java'
+
+targetCompatibility = '11'
+sourceCompatibility = '11'
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    implementation 'com.lostsidewalk.newsgears:newsgears-model:0.1-dev1'
+
+    // SLF4J
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation 'org.slf4j:slf4j-simple:2.0.0-alpha7'
+
+    // NewsAPI
+    implementation 'com.github.KwabenBerko:News-API-Java:1.0.2'
+    // json
+    implementation 'org.json:json:20220320'
+    // spring-boot-starter
+    implementation 'org.springframework.boot:spring-boot-starter:2.7.3'
+    // commons-collections4
+    implementation 'org.apache.commons:commons-collections4:4.4'
+    // commons-lang
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
+    // jaxb-api
+    implementation 'javax.xml.bind:jaxb-api:2.4.0-b180830.0359'
+
+    // GSON
+    implementation 'com.google.code.gson:gson:2.9.1'
+
+    // lombok
+    compileOnly 'org.projectlombok:lombok:1.18.24'
+    annotationProcessor 'org.projectlombok:lombok:1.18.22'
+    testCompileOnly 'org.projectlombok:lombok:1.18.22'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.22'
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            groupId = 'com.lostsidewalk.newsgears'
+            artifactId = 'newsgears-newsapi-importer'
+            version = '0.1-dev1'
+
+            from components.java
+        }
+    }
+}
