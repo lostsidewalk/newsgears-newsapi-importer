@@ -195,7 +195,7 @@ public class NewsApiImporter implements Importer {
             if (!objectSrc.isJsonObject()) {
                 continue;
             }
-            StagingPost p = StagingPost.from(NEWS_API_V2_IMPORTER_ID, tagName, getImporterDesc(query), a.getTitle(), a.getDescription(), a.getUrl(), a.getUrlToImage(), objectSrc.toString(), new Date(), computeHash(md, objectSrc));
+            StagingPost p = StagingPost.from(NEWS_API_V2_IMPORTER_ID, tagName, getImporterDesc(query), a.getTitle(), a.getDescription(), a.getUrl(), a.getUrlToImage(), objectSrc.toString(), new Date(), computeHash(md, tagName, objectSrc));
             stagingPosts.add(p);
         }
 
@@ -208,7 +208,7 @@ public class NewsApiImporter implements Importer {
 
     private static final Gson GSON = new Gson();
 
-    private static String computeHash(MessageDigest md, JsonElement objectSrc) {
-        return printHexBinary(md.digest(serialize(objectSrc.toString())));
+    private static String computeHash(MessageDigest md, String tagName, JsonElement objectSrc) {
+        return printHexBinary(md.digest(serialize(String.format("%s:%s", tagName, objectSrc.toString()))));
     }
 }
