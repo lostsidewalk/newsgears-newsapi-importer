@@ -20,6 +20,8 @@ public class NewsApiImporterConfigProps {
 
     private Map<String, String> tag;
 
+    private String lang;
+
     public String getKey() {
         return key;
     }
@@ -58,5 +60,13 @@ public class NewsApiImporterConfigProps {
 
     public void setTag(Map<String, String> tag) {
         this.tag = tag;
+    }
+
+    public String getLang() {
+        return lang;
+    }
+
+    public void setLang(String lang) {
+        this.lang = lang;
     }
 }

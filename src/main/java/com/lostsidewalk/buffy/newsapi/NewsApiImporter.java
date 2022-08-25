@@ -82,7 +82,7 @@ public class NewsApiImporter implements Importer {
         if (isTrue(this.configProps.getDebugSources())) {
             newsApiClient.getSources(
                     new SourcesRequest.Builder()
-                            .language("en")
+                            .language(configProps.getLang())
                             .country(this.configProps.getSourceCountry())
                             .build(),
                     new NewsApiClient.SourcesCallback() {
@@ -107,9 +107,21 @@ public class NewsApiImporter implements Importer {
     static final String HEADLINE_KEYWORDS_PROP_NAME = "headline-keywords";
 
     static class TagImportConfig {
-        String everythingQuery;
+        private String everythingQuery;
 
-        String[] headlineKeywords;
+        private List<String> headlineKeywords;
+
+        Optional<String> everythingQuery() { return Optional.ofNullable(everythingQuery); }
+
+        Optional<List<String>> headlineKeywords() { return Optional.ofNullable(headlineKeywords); }
+
+        public void setEverythingQuery(String everythingQuery) {
+            this.everythingQuery = everythingQuery;
+        }
+
+        public void setHeadlineKeywords(List<String> headlineKeywords) {
+            this.headlineKeywords = headlineKeywords;
+        }
     }
 
     @Override
@@ -139,11 +151,11 @@ public class NewsApiImporter implements Importer {
             TagImportConfig config = configMap.get(tagName);
             switch (tagPropertyName) {
                 case EVERY_QUERY_PROP_NAME: {
-                    config.everythingQuery = propValue;
+                    config.setEverythingQuery(propValue);
                     break;
                 }
                 case HEADLINE_KEYWORDS_PROP_NAME: {
-                    config.headlineKeywords = propValue.split(",");
+                    config.setHeadlineKeywords(List.of(propValue.split(",")));
                     break;
                 }
             }
@@ -154,19 +166,18 @@ public class NewsApiImporter implements Importer {
 
     private void importTag(String tagName, TagImportConfig tagImportConfig) {
         log.debug("importing tagName={}. config={}", tagName, tagImportConfig);
-        newsApiClient.getEverything(
-                new EverythingRequest.Builder()
-                        .q(tagImportConfig.everythingQuery)
-                        .build(), getArticlesResponseHandler(tagName, tagImportConfig.everythingQuery));
 
-        for (String k : tagImportConfig.headlineKeywords) {
-            log.debug("headlineQuery={}", k);
-            this.newsApiClient.getTopHeadlines(
-                    new TopHeadlinesRequest.Builder()
-                            .q(k)
-                            .language("en")
-                            .build(), getArticlesResponseHandler(tagName, k));
-        }
+        tagImportConfig.everythingQuery().ifPresent(q -> newsApiClient.getEverything(
+                new EverythingRequest.Builder()
+                        .q(q)
+                        .language(configProps.getLang())
+                        .build(), getArticlesResponseHandler(tagName, String.format("[everything: %s]", q))));
+
+        tagImportConfig.headlineKeywords().ifPresent(l -> l.forEach(k -> this.newsApiClient.getTopHeadlines(
+                new TopHeadlinesRequest.Builder()
+                        .q(k)
+                        .language(configProps.getLang())
+                        .build(), getArticlesResponseHandler(tagName, String.format("[headlines: %s]", k)))));
     }
 
     @Override
