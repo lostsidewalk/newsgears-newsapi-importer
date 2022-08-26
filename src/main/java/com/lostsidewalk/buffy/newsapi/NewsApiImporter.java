@@ -22,6 +22,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static javax.xml.bind.DatatypeConverter.printHexBinary;
 import static org.apache.commons.lang3.BooleanUtils.isTrue;
@@ -47,13 +48,13 @@ public class NewsApiImporter implements Importer {
             @Override
             public void onSuccess(ArticleResponse response) {
                 try {
-                    int successAggregatorSz = successAggregator.size();
+                    AtomicInteger importCt = new AtomicInteger(0);
                     importArticleResponse(tagName, query, response).forEach(s -> {
                         log.debug("Adding post hash={} to queue for tagName={}", s.getPostHash(), tagName);
                         successAggregator.offer(s);
+                        importCt.getAndIncrement();
                     });
-                    int successAggregatorSzDiff = successAggregator.size() - successAggregatorSz;
-                    log.info("Import success, tagName={}, query={}, queueSz={} (+{}), errorSz={}", tagName, query, successAggregator.size(), successAggregatorSzDiff, errorAggregator.size());
+                    log.info("Import success, tagName={}, query={}, importCt={}", tagName, query, importCt.intValue());
                 } catch (Exception e) {
                     log.error("Import failure, tagName={}, query={} due to: {}", tagName, query, e.getMessage());
                 }
