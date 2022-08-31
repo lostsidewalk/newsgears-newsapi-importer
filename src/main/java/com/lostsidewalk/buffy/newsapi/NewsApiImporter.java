@@ -167,7 +167,7 @@ public class NewsApiImporter implements Importer {
     }
 
     private void importTag(String tagName, TagImportConfig tagImportConfig) {
-        log.info("importing tagName={}. config={}", tagName, tagImportConfig);
+        log.info("Importing tagName={}. config={}", tagName, tagImportConfig);
 
         tagImportConfig.everythingQuery().ifPresent(q -> newsApiClient.getEverything(
                 new EverythingRequest.Builder()
