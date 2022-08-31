@@ -18,8 +18,8 @@ dependencies {
     implementation 'com.lostsidewalk.newsgears:newsgears-model:0.1-dev1'
 
     // SLF4J
-    implementation 'org.slf4j:slf4j-api:1.7.36'
-    implementation 'org.slf4j:slf4j-simple:2.0.0-alpha7'
+    implementation 'org.slf4j:slf4j-api:2.0.0'
+    implementation 'org.slf4j:slf4j-simple:2.0.0'
 
     // NewsAPI
     implementation 'com.github.KwabenBerko:News-API-Java:1.0.2'

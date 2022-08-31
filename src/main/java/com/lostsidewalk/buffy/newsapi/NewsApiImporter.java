@@ -81,6 +81,7 @@ public class NewsApiImporter implements Importer {
         // dump source data from /v2/top-headlines/sources on start-up (if debugSources eq true)
         //
         if (isTrue(this.configProps.getDebugSources())) {
+            log.info("Getting sources...");
             newsApiClient.getSources(
                     new SourcesRequest.Builder()
                             .language(configProps.getLang())
@@ -166,7 +167,7 @@ public class NewsApiImporter implements Importer {
     }
 
     private void importTag(String tagName, TagImportConfig tagImportConfig) {
-        log.debug("importing tagName={}. config={}", tagName, tagImportConfig);
+        log.info("importing tagName={}. config={}", tagName, tagImportConfig);
 
         tagImportConfig.everythingQuery().ifPresent(q -> newsApiClient.getEverything(
                 new EverythingRequest.Builder()
