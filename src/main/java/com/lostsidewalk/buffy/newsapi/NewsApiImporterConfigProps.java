@@ -3,70 +3,52 @@ package com.lostsidewalk.buffy.newsapi;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.Map;
-
 
 @Configuration
 @ConfigurationProperties(prefix = "news.api")
 public class NewsApiImporterConfigProps {
 
-    private String key;
+    private boolean disabled;
 
-    private String sourceCountry;
+    private String key;
 
     private boolean debugSources;
 
-    private long importTimeoutMs;
+    private boolean importMockData;
 
-    private Map<String, String> tag;
+    public boolean getDisabled() {
+        return disabled;
+    }
 
-    private String lang;
+    @SuppressWarnings("unused")
+    public void setDisabled(boolean disabled) {
+        this.disabled = disabled;
+    }
 
     public String getKey() {
         return key;
     }
 
+    @SuppressWarnings("unused")
     public void setKey(String key) {
         this.key = key;
-    }
-
-    public String getSourceCountry() {
-        return sourceCountry;
-    }
-
-    public void setSourceCountry(String sourceCountry) {
-        this.sourceCountry = sourceCountry;
     }
 
     public boolean getDebugSources() {
         return debugSources;
     }
 
+    @SuppressWarnings("unused")
     public void setDebugSources(boolean debugSources) {
         this.debugSources = debugSources;
     }
 
-    public long getImportTimeoutMs() {
-        return importTimeoutMs;
+    public boolean getImportMockData() {
+        return importMockData;
     }
 
-    public void setImportTimeoutMs(long importTimeoutMs) {
-        this.importTimeoutMs = importTimeoutMs;
-    }
-
-    public Map<String, String> getTag() {
-        return tag;
-    }
-
-    public void setTag(Map<String, String> tag) {
-        this.tag = tag;
-    }
-
-    public String getLang() {
-        return lang;
-    }
-
-    public void setLang(String lang) {
-        this.lang = lang;
+    @SuppressWarnings("unused")
+    public void setImportMockData(boolean importMockData) {
+        this.importMockData = importMockData;
     }
 }

@@ -5,8 +5,11 @@ plugins {
 
 apply plugin: 'java'
 
-targetCompatibility = '11'
-sourceCompatibility = '11'
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(19)
+    }
+}
 
 repositories {
     mavenCentral()
@@ -15,27 +18,32 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.lostsidewalk.newsgears:newsgears-model:0.1-dev1'
+    implementation 'com.lostsidewalk.newsgears:newsgears-data:0.2'
 
     // SLF4J
-    implementation 'org.slf4j:slf4j-api:2.0.0'
-    implementation 'org.slf4j:slf4j-simple:2.0.0'
+    implementation 'org.slf4j:slf4j-api:2.0.5'
 
     // NewsAPI
     implementation 'com.github.KwabenBerko:News-API-Java:1.0.2'
     // json
-    implementation 'org.json:json:20220320'
+    implementation 'org.json:json:20220924'
     // spring-boot-starter
-    implementation 'org.springframework.boot:spring-boot-starter:2.7.3'
+    implementation 'org.springframework.boot:spring-boot-starter:3.0.0'
     // commons-collections4
     implementation 'org.apache.commons:commons-collections4:4.4'
     // commons-lang
     implementation 'org.apache.commons:commons-lang3:3.12.0'
     // jaxb-api
     implementation 'javax.xml.bind:jaxb-api:2.4.0-b180830.0359'
-
     // GSON
-    implementation 'com.google.code.gson:gson:2.9.1'
+    implementation 'com.google.code.gson:gson:2.10'
+
+    // test
+    testImplementation('org.springframework.boot:spring-boot-starter-test:3.0.0') {
+        exclude group: 'com.vaadin.external.google', module: 'android-json'
+    }
+    // junit-jupiter
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.1'
 
     // lombok
     compileOnly 'org.projectlombok:lombok:1.18.24'
@@ -49,9 +57,13 @@ publishing {
         maven(MavenPublication) {
             groupId = 'com.lostsidewalk.newsgears'
             artifactId = 'newsgears-newsapi-importer'
-            version = '0.1-dev1'
+            version = '0.2'
 
             from components.java
         }
     }
+}
+
+test {
+    useJUnitPlatform()
 }
