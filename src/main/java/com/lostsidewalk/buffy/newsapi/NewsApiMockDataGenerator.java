@@ -16,40 +16,40 @@ import static java.util.Collections.singletonList;
 class NewsApiMockDataGenerator {
 
     ArticleResponse buildMockResponse(QueryDefinition q) {
-        String feedIdent = q.getFeedIdent();
+        Long feedId = q.getFeedId();
         ArticleResponse mockResponse = new ArticleResponse();
         mockResponse.setTotalResults(1);
-        mockResponse.setStatus("test-status-" + feedIdent);
+        mockResponse.setStatus("test-status-" + feedId);
         mockResponse.setArticles(buildMockArticle(q));
 
         return mockResponse;
     }
 
     private List<Article> buildMockArticle(QueryDefinition q) {
-        String feedIdent = q.getFeedIdent();
+        Long feedId = q.getFeedId();
         Article mockArticle = new Article();
-        mockArticle.setAuthor("test-author" + feedIdent);
-        mockArticle.setContent("test-content" + feedIdent);
-        mockArticle.setDescription("test-description" + feedIdent);
+        mockArticle.setAuthor("test-author" + feedId);
+        mockArticle.setContent("test-content" + feedId);
+        mockArticle.setDescription("test-description" + feedId);
         mockArticle.setSource(buildMockSource(q));
-        mockArticle.setPublishedAt("test-published-atr" + feedIdent);
-        mockArticle.setUrl("test-url" + feedIdent);
-        mockArticle.setUrlToImage("test-url-to-image" + feedIdent);
-        mockArticle.setTitle("test-title" + feedIdent);
+        mockArticle.setPublishedAt("test-published-atr" + feedId);
+        mockArticle.setUrl("test-url" + feedId);
+        mockArticle.setUrlToImage("test-url-to-image" + feedId);
+        mockArticle.setTitle("test-title" + feedId);
 
         return singletonList(mockArticle);
     }
 
     private Source buildMockSource(QueryDefinition q) {
-        String feedIdent = q.getFeedIdent();
+        Long feedId = q.getFeedId();
         Source mockSource = new Source();
-        mockSource.setCategory("test-source-category-" + feedIdent);
-        mockSource.setDescription("test-source-description-" + feedIdent);
-        mockSource.setCountry("test-source-country-" + feedIdent);
-        mockSource.setUrl("test-source-url-" + feedIdent);
-        mockSource.setId("test-source-id-" + feedIdent);
-        mockSource.setLanguage("test-source-language-" + feedIdent);
-        mockSource.setName("test-source-name-" + feedIdent);
+        mockSource.setCategory("test-source-category-" + feedId);
+        mockSource.setDescription("test-source-description-" + feedId);
+        mockSource.setCountry("test-source-country-" + feedId);
+        mockSource.setUrl("test-source-url-" + feedId);
+        mockSource.setId("test-source-id-" + feedId);
+        mockSource.setLanguage("test-source-language-" + feedId);
+        mockSource.setName("test-source-name-" + feedId);
 
         return mockSource;
     }

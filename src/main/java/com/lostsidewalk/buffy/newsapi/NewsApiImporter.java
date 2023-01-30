@@ -1,5 +1,6 @@
 package com.lostsidewalk.buffy.newsapi;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -14,6 +15,8 @@ import com.kwabenaberko.newsapilib.models.request.TopHeadlinesRequest;
 import com.kwabenaberko.newsapilib.models.response.ArticleResponse;
 import com.kwabenaberko.newsapilib.models.response.SourcesResponse;
 import com.lostsidewalk.buffy.Importer;
+import com.lostsidewalk.buffy.post.ContentObject;
+import com.lostsidewalk.buffy.post.PostPerson;
 import com.lostsidewalk.buffy.post.StagingPost;
 import com.lostsidewalk.buffy.query.QueryDefinition;
 import jakarta.annotation.PostConstruct;
@@ -21,18 +24,28 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.io.Serializable;
+import java.lang.reflect.Type;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.*;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.time.format.DateTimeFormatter.ISO_INSTANT;
+import static java.util.Collections.singletonList;
 import static java.util.Optional.ofNullable;
+import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.toList;
 import static javax.xml.bind.DatatypeConverter.printHexBinary;
 import static org.apache.commons.collections4.CollectionUtils.isNotEmpty;
+import static org.apache.commons.collections4.CollectionUtils.size;
 import static org.apache.commons.lang3.BooleanUtils.isTrue;
 import static org.apache.commons.lang3.SerializationUtils.serialize;
 import static org.apache.commons.lang3.StringUtils.*;
@@ -56,12 +69,20 @@ public class NewsApiImporter implements Importer {
     @Autowired
     NewsApiClient newsApiClient;
 
+    private ExecutorService newsApiV2ThreadPool;
+
     @PostConstruct
     public void postConstruct() {
         //
         // banner message
         //
         log.info("NewsAPI V2 importer constructed at {}", Instant.now());
+        //
+        // thread pool setup
+        //
+        int processorCt = Runtime.getRuntime().availableProcessors() - 1;
+        log.info("Starting discovery thread pool: processCount={}", processorCt);
+        this.newsApiV2ThreadPool = newFixedThreadPool(processorCt, new ThreadFactoryBuilder().setNameFormat("newsapiv2-importer-%d").build());
         //
         // dump source data from /v2/top-headlines/sources on start-up (if debugSources eq true)
         //
@@ -87,6 +108,10 @@ public class NewsApiImporter implements Importer {
         }
     }
 
+    //
+    //
+    //
+
     @Override
     public void doImport(List<QueryDefinition> queryDefinitions) {
         if (this.configProps.getDisabled()) {
@@ -94,36 +119,48 @@ public class NewsApiImporter implements Importer {
             if (this.configProps.getImportMockData()) {
                 log.warn("NewsAPI v2 importer importing mock records");
                 queryDefinitions.forEach(q ->
-                        getArticlesResponseHandler(q.getFeedIdent(), q.getQueryText(), q.getQueryType(), q.getUsername())
+                        getArticlesResponseHandler(q.getFeedId(), q.getQueryText(), q.getQueryType(), q.getUsername())
                                 .onSuccess(newsApiMockDataGenerator.buildMockResponse(q)));
             }
             return;
         }
 
         log.info("NewsAPI V2 importer running at {}", Instant.now());
-        queryDefinitions.stream()
+
+        List<QueryDefinition> supportedQueryDefinitions = queryDefinitions.parallelStream()
                 .filter(q -> supportsQueryType(q.getQueryType()))
-                .forEach(q ->
-                        this.performImport(q, getArticlesResponseHandler(q.getFeedIdent(), String.format("[query: %s]", q.getQueryText()), q.getQueryType(), q.getUsername()))
-                );
+                .toList();
+
+        CountDownLatch latch = new CountDownLatch(size(supportedQueryDefinitions));
+        log.info("NewsAPI V2 import latch initialized to: {}", latch.getCount());
+        supportedQueryDefinitions.forEach(q -> newsApiV2ThreadPool.submit(() -> {
+            this.performImport(q, getArticlesResponseHandler(
+                    q.getFeedId(),
+                    String.format("[query: %s]", q.getQueryText()), q.getQueryType(), q.getUsername())
+            );
+            latch.countDown();
+            if (latch.getCount() % 50 == 0) {
+                log.info("NewsApi V2 import latch currently at {}: ", latch.getCount());
+            }
+        }));
 
         log.info("NewsAPI V2 importer finished at {}", Instant.now());
     }
 
-    private NewsApiClient.ArticlesResponseCallback getArticlesResponseHandler(String feedIdent, String query, String queryType, String username) {
+    private NewsApiClient.ArticlesResponseCallback getArticlesResponseHandler(Long feedId, String query, String queryType, String username) {
         return new NewsApiClient.ArticlesResponseCallback() {
             @Override
             public void onSuccess(ArticleResponse response) {
                 try {
                     AtomicInteger importCt = new AtomicInteger(0);
-                    importArticleResponse(feedIdent, query, response, username).forEach(s -> {
-                        log.debug("Adding post hash={} to queue for feedIdent={}, username={}", s.getPostHash(), feedIdent, username);
+                    importArticleResponse(feedId, query, response, username).forEach(s -> {
+                        log.debug("Adding post hash={} to queue for feedId={}, username={}", s.getPostHash(), feedId, username);
                         successAggregator.offer(s);
                         importCt.getAndIncrement();
                     });
-                    log.info("Import success, feedIdent={}, username={}, queryType={}, queryText={}, importCt={}", feedIdent, username, queryType, query, importCt.intValue());
+                    log.info("Import success, feedId={}, username={}, queryType={}, queryText={}, importCt={}", feedId, username, queryType, query, importCt.intValue());
                 } catch (Exception e) {
-                    log.error("Import failure, feedIdent={}, username={}, queryType={}, queryText={} due to: {}", feedIdent, username, queryType, query, e.getMessage());
+                    log.error("Import failure, feedId={}, username={}, queryType={}, queryText={} due to: {}", feedId, username, queryType, query, e.getMessage());
                 }
             }
 
@@ -133,6 +170,10 @@ public class NewsApiImporter implements Importer {
             }
         };
     }
+
+    //
+    //
+    //
 
     private boolean supportsQueryType(String queryType) {
         return equalsAnyIgnoreCase(queryType, SUPPORTED_QUERY_TYPES);
@@ -156,7 +197,7 @@ public class NewsApiImporter implements Importer {
             @Override
             public void onSuccess(ArticleResponse response) {
                 try {
-                    Set<StagingPost> stagingPosts = importArticleResponse(queryDefinition.getFeedIdent(), queryDefinition.getQueryText(), response, queryDefinition.getUsername());
+                    Set<StagingPost> stagingPosts = importArticleResponse(queryDefinition.getFeedId(), queryDefinition.getQueryText(), response, queryDefinition.getUsername());
                     importResponseCallback.onSuccess(stagingPosts);
                     successCt++;
                 } catch (Exception e) {
@@ -184,11 +225,13 @@ public class NewsApiImporter implements Importer {
         return obj != null && obj.has(propName) ? obj.get(propName).getAsJsonArray() : null;
     }
 
+    private static final Type NEWSAPI_SOURCES_TYPE = new TypeToken<List<NewsApiSources>>() {}.getType();
+
     // import according to params defined by newsApiImportConfig, and build staging posts tagged w/feedIdent
     private void performImport(QueryDefinition queryDefinition, NewsApiClient.ArticlesResponseCallback articleResponseHandler) {
         String username = queryDefinition.getUsername();
-        String feedIdent = queryDefinition.getFeedIdent();
-        log.info("Importing feedIdent={}, username={}, queryDefinition={}", feedIdent, username, queryDefinition);
+        Long feedId = queryDefinition.getFeedId();
+        log.info("Importing feedId={}, username={}, queryDefinition={}", feedId, username, queryDefinition);
         // query expression
         String queryText = queryDefinition.getQueryText();
         // query sources
@@ -199,7 +242,7 @@ public class NewsApiImporter implements Importer {
         List<NewsApiSources> sources = null;
         JsonArray sourcesArr = getArrayProperty(queryConfigObj, "sources");
         if (sourcesArr != null) {
-            sources = GSON.fromJson(sourcesArr, new TypeToken<List<NewsApiSources>>() {}.getType());
+            sources = GSON.fromJson(sourcesArr, NEWSAPI_SOURCES_TYPE);
         }
         // query language (ar de en es fr he it nl no pt ru sv ud zh)
         String queryLanguage = getStringProperty(queryConfigObj, "language");
@@ -253,43 +296,49 @@ public class NewsApiImporter implements Importer {
 
     private static final String NEWS_API_V2_IMPORTER_ID = "NewsApiV2";
 
-    private static Set<StagingPost> importArticleResponse(String feedIdent, String query, ArticleResponse articleResponse, String username) throws NoSuchAlgorithmException {
+    private static Set<StagingPost> importArticleResponse(Long feedId, String query, ArticleResponse articleResponse, String username) throws NoSuchAlgorithmException {
         Set<StagingPost> stagingPosts = new HashSet<>();
         MessageDigest md = MessageDigest.getInstance("MD5");
         for (Article a : articleResponse.getArticles()) {
-            JsonElement objectSrc = GSON.toJsonTree(a);
-            if (!objectSrc.isJsonObject()) {
-                continue;
+            // generate source object
+            Serializable objectSrc = getObjectSrc(a);
+            // generate contents
+            List<ContentObject> articleContents = null;
+            String contentStr = a.getContent();
+            if (isNotBlank(contentStr)) {
+                articleContents = singletonList(ContentObject.from("text", contentStr));
             }
+            // generate staging post
             StagingPost p = StagingPost.from(
                     NEWS_API_V2_IMPORTER_ID, // importer Id
-                    feedIdent, // feed ident
+                    feedId, // feed Id
                     getImporterDesc(query), // importer desc
-                    objectSrc.toString(), // source
-                    ofNullable(a.getSource()).map(Source::getName).orElse(EMPTY), // source name
-                    ofNullable(a.getSource()).map(Source::getUrl).orElse(EMPTY), // source name
-                    a.getTitle(), // post title
-                    a.getDescription(), // post description
+                    objectSrc, // source
+                    ofNullable(a.getSource()).map(Source::getName).orElse(null), // source name
+                    ofNullable(a.getSource()).map(Source::getUrl).orElse(null), // source name
+                    ContentObject.from("text", a.getTitle()), // post title
+                    ContentObject.from("text", a.getDescription()), // post description
+                    articleContents, // post_contents
+                    null, // post_media
+                    null, // post_itunes
                     a.getUrl(), // post url
+                    null, // post urls
                     a.getUrlToImage(), // post img url
                     // no img transport ident
                     new Date(), // import timestamp
-                    computeHash(md, feedIdent, objectSrc), // post hash
+                    computeHash(md, feedId, objectSrc), // post hash
                     username, // post username
                     null, // post comment
-                    false, // is published
                     null, // post rights
-                    null, // xml base
-                    null, // contributor name
-                    null, // contributor email
-                    a.getAuthor(), // author name
-                    null, // author email
-                    ofNullable(a.getSource()).map(Source::getCategory).orElse(null), // post category
+                    null, // contributors
+                    getAuthors(a), // authors
+                    getPostCategories(a), // post categories
                     toTimestamp(a.getPublishedAt()), // publish timestamp
                     null, // expiration timestamp
-                    null, // enclosure url
+                    null, // enclosures
                     null // last updated timestamp
             );
+            // accumulate staging posts
             stagingPosts.add(p);
         }
 
@@ -297,7 +346,28 @@ public class NewsApiImporter implements Importer {
     }
 
     private static String getImporterDesc(String query) {
-        return String.format("[query=%s]", query);
+        return trimToEmpty(query);
+    }
+
+    private static Serializable getObjectSrc(Article article) {
+        JsonElement objectSrc = GSON.toJsonTree(article);
+        if (objectSrc.isJsonObject()) {
+            return objectSrc.toString();
+        }
+
+        return null;
+    }
+
+    private static List<String> getPostCategories(Article article) {
+        return ofNullable(article.getSource()).map(Source::getCategory).stream().collect(toList());
+    }
+
+    private static List<PostPerson> getAuthors(Article article) {
+        return ofNullable(article.getAuthor()).map(author -> {
+            PostPerson p = new PostPerson();
+            p.setName(author);
+            return p;
+        }).stream().collect(toList());
     }
 
     private static Date toTimestamp(String str) {
@@ -308,7 +378,7 @@ public class NewsApiImporter implements Importer {
 
     private static final Gson GSON = new Gson();
 
-    private static String computeHash(MessageDigest md, String feedIdent, JsonElement objectSrc) {
-        return printHexBinary(md.digest(serialize(String.format("%s:%s", feedIdent, objectSrc.toString()))));
+    private static String computeHash(MessageDigest md, Long feedId, Serializable objectSrc) {
+        return printHexBinary(md.digest(serialize(String.format("%s:%s", feedId, objectSrc))));
     }
 }
