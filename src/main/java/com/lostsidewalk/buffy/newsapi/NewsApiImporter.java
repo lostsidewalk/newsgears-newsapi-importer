@@ -19,6 +19,7 @@ import com.lostsidewalk.buffy.post.ContentObject;
 import com.lostsidewalk.buffy.post.PostPerson;
 import com.lostsidewalk.buffy.post.StagingPost;
 import com.lostsidewalk.buffy.query.QueryDefinition;
+import com.lostsidewalk.buffy.query.QueryMetrics;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,9 +57,6 @@ public class NewsApiImporter implements Importer {
 
     @Autowired
     NewsApiImporterConfigProps configProps;
-
-    @Autowired
-    Queue<StagingPost> successAggregator;
 
     @Autowired
     Queue<Throwable> errorAggregator;
@@ -113,16 +111,19 @@ public class NewsApiImporter implements Importer {
     //
 
     @Override
-    public void doImport(List<QueryDefinition> queryDefinitions) {
+    public ImportResult doImport(List<QueryDefinition> queryDefinitions) {
+        Set<StagingPost> importSet = new HashSet<>();
+        List<QueryMetrics> queryMetrics = new ArrayList<>(size(queryDefinitions));
         if (this.configProps.getDisabled()) {
             log.warn("NewsAPI v2 importer is administratively disabled");
             if (this.configProps.getImportMockData()) {
                 log.warn("NewsAPI v2 importer importing mock records");
+                CountDownLatch latch = new CountDownLatch(size(queryDefinitions));
                 queryDefinitions.forEach(q ->
-                        getArticlesResponseHandler(q.getFeedId(), q.getQueryText(), q.getQueryType(), q.getUsername())
+                        getArticlesResponseHandler(q, latch, importSet, queryMetrics)
                                 .onSuccess(newsApiMockDataGenerator.buildMockResponse(q)));
             }
-            return;
+            return ImportResult.from(importSet, queryMetrics);
         }
 
         log.info("NewsAPI V2 importer running at {}", Instant.now());
@@ -134,39 +135,53 @@ public class NewsApiImporter implements Importer {
         CountDownLatch latch = new CountDownLatch(size(supportedQueryDefinitions));
         log.info("NewsAPI V2 import latch initialized to: {}", latch.getCount());
         supportedQueryDefinitions.forEach(q -> newsApiV2ThreadPool.submit(() -> {
-            this.performImport(q, getArticlesResponseHandler(
-                    q.getFeedId(),
-                    String.format("[query: %s]", q.getQueryText()), q.getQueryType(), q.getUsername())
-            );
-            latch.countDown();
+            this.performImport(q, getArticlesResponseHandler(q, latch, importSet, queryMetrics));
             if (latch.getCount() % 50 == 0) {
                 log.info("NewsApi V2 import latch currently at {}: ", latch.getCount());
             }
         }));
 
         log.info("NewsAPI V2 importer finished at {}", Instant.now());
+
+        return ImportResult.from(importSet, queryMetrics);
     }
 
-    private NewsApiClient.ArticlesResponseCallback getArticlesResponseHandler(Long feedId, String query, String queryType, String username) {
+    private NewsApiClient.ArticlesResponseCallback getArticlesResponseHandler(QueryDefinition queryDefinition, CountDownLatch latch, Set<StagingPost> importSet, List<QueryMetrics> queryMetrics) {
         return new NewsApiClient.ArticlesResponseCallback() {
             @Override
             public void onSuccess(ArticleResponse response) {
+                Date importTimestamp = new Date();
+                Long feedId = queryDefinition.getFeedId();
+                String queryText = queryDefinition.getQueryText();
+                String username = queryDefinition.getUsername();
+                String queryType = queryDefinition.getQueryType();
                 try {
                     AtomicInteger importCt = new AtomicInteger(0);
-                    importArticleResponse(feedId, query, response, username).forEach(s -> {
+                    importArticleResponse(feedId, queryText, response, username, importTimestamp).forEach(s -> {
                         log.debug("Adding post hash={} to queue for feedId={}, username={}", s.getPostHash(), feedId, username);
-                        successAggregator.offer(s);
+                        importSet.add(s);
                         importCt.getAndIncrement();
                     });
-                    log.info("Import success, feedId={}, username={}, queryType={}, queryText={}, importCt={}", feedId, username, queryType, query, importCt.intValue());
+                    // update query metrics
+                    queryMetrics.add(QueryMetrics.from(
+                            queryDefinition.getId(),
+                            importTimestamp,
+                            importCt.intValue()));
+                    log.info("Import success, feedId={}, username={}, queryType={}, queryText={}, importCt={}", feedId, username, queryType, queryText, importCt.intValue());
+                    latch.countDown();
                 } catch (Exception e) {
-                    log.error("Import failure, feedId={}, username={}, queryType={}, queryText={} due to: {}", feedId, username, queryType, query, e.getMessage());
+                    log.error("Import failure, feedId={}, username={}, queryType={}, queryText={} due to: {}", feedId, username, queryType, queryText, e.getMessage());
                 }
             }
 
             @Override
             public void onFailure(Throwable throwable) {
                 errorAggregator.offer(throwable);
+                QueryMetrics qm = QueryMetrics.from(queryDefinition.getId(), new Date(), 0);
+                qm.setErrorType(QueryMetrics.QueryExceptionType.OTHER);
+                qm.setErrorDetail(throwable.getMessage());
+                queryMetrics.add(qm);
+                latch.countDown();
             }
         };
     }
@@ -186,36 +201,6 @@ public class NewsApiImporter implements Importer {
     private static final String[] SUPPORTED_QUERY_TYPES = new String[] {
             NEWSAPIV2_EVERYTHING, NEWSAPIV2_HEADLINES
     };
-
-    @Override
-    public ImporterMetrics performImport(QueryDefinition queryDefinition, ImportResponseCallback importResponseCallback) {
-
-        class CountingArticlesResponseCallback implements NewsApiClient.ArticlesResponseCallback {
-
-            private int successCt, errorCt;
-
-            @Override
-            public void onSuccess(ArticleResponse response) {
-                try {
-                    Set<StagingPost> stagingPosts = importArticleResponse(queryDefinition.getFeedId(), queryDefinition.getQueryText(), response, queryDefinition.getUsername());
-                    importResponseCallback.onSuccess(stagingPosts);
-                    successCt++;
-                } catch (Exception e) {
-                    onFailure(e);
-                }
-            }
-
-            @Override
-            public void onFailure(Throwable throwable) {
-                importResponseCallback.onFailure(throwable);
-                errorCt++;
-            }
-        }
-
-        CountingArticlesResponseCallback callback = new CountingArticlesResponseCallback();
-        this.performImport(queryDefinition, callback);
-        return new ImporterMetrics(callback.successCt, callback.errorCt);
-    }
 
     private static String getStringProperty(JsonObject obj, String propName) {
         return obj != null && obj.has(propName) ? obj.get(propName).getAsString() : null;
@@ -296,7 +281,7 @@ public class NewsApiImporter implements Importer {
 
     private static final String NEWS_API_V2_IMPORTER_ID = "NewsApiV2";
 
-    private static Set<StagingPost> importArticleResponse(Long feedId, String query, ArticleResponse articleResponse, String username) throws NoSuchAlgorithmException {
+    private static Set<StagingPost> importArticleResponse(Long feedId, String query, ArticleResponse articleResponse, String username, Date importTimestamp) throws NoSuchAlgorithmException {
         Set<StagingPost> stagingPosts = new HashSet<>();
         MessageDigest md = MessageDigest.getInstance("MD5");
         for (Article a : articleResponse.getArticles()) {
@@ -325,7 +310,7 @@ public class NewsApiImporter implements Importer {
                     null, // post urls
                     a.getUrlToImage(), // post img url
                     // no img transport ident
-                    new Date(), // import timestamp
+                    importTimestamp, // import timestamp
                     computeHash(md, feedId, objectSrc), // post hash
                     username, // post username
                     null, // post comment

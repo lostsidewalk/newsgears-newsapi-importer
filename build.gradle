@@ -18,7 +18,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.lostsidewalk.newsgears:newsgears-data:0.3'
+    implementation 'com.lostsidewalk.newsgears:newsgears-data:0.4'
 
     // SLF4J
     implementation 'org.slf4j:slf4j-api:2.0.5'
@@ -59,7 +59,7 @@ publishing {
         maven(MavenPublication) {
             groupId = 'com.lostsidewalk.newsgears'
             artifactId = 'newsgears-newsapi-importer'
-            version = '0.3'
+            version = '0.4'
 
             from components.java
         }
