@@ -79,7 +79,8 @@ public class NewsApiImporter implements Importer {
         // thread pool setup
         //
         int processorCt = Runtime.getRuntime().availableProcessors() - 1;
-        log.info("Starting discovery thread pool: processCount={}", processorCt);
+        processorCt = processorCt > 0 ? processorCt : 1;
+        log.info("Starting newsapiv2 importer thread pool: processCount={}", processorCt);
         this.newsApiV2ThreadPool = newFixedThreadPool(processorCt, new ThreadFactoryBuilder().setNameFormat("newsapiv2-importer-%d").build());
         //
         // dump source data from /v2/top-headlines/sources on start-up (if debugSources eq true)
