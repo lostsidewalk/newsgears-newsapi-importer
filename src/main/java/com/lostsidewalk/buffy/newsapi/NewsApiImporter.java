@@ -152,13 +152,14 @@ public class NewsApiImporter implements Importer {
             public void onSuccess(ArticleResponse response) {
                 Date importTimestamp = new Date();
                 Long feedId = queryDefinition.getFeedId();
+                Long queryId = queryDefinition.getId();
                 String queryText = queryDefinition.getQueryText();
                 String username = queryDefinition.getUsername();
                 String queryType = queryDefinition.getQueryType();
                 try {
                     AtomicInteger importCt = new AtomicInteger(0);
-                    importArticleResponse(feedId, queryText, response, username, importTimestamp).forEach(s -> {
-                        log.debug("Adding post hash={} to queue for feedId={}, username={}", s.getPostHash(), feedId, username);
+                    importArticleResponse(feedId, queryId, queryText, response, username, importTimestamp).forEach(s -> {
+                        log.debug("Adding post hash={} to queue for feedId={}, queryId={}, username={}", s.getPostHash(), feedId, queryId, username);
                         importSet.add(s);
                         importCt.getAndIncrement();
                     });
@@ -167,10 +168,12 @@ public class NewsApiImporter implements Importer {
                             queryDefinition.getId(),
                             importTimestamp,
                             importCt.intValue()));
-                    log.info("Import success, feedId={}, username={}, queryType={}, queryText={}, importCt={}", feedId, username, queryType, queryText, importCt.intValue());
+                    log.info("Import success, username={}, feedId={}, queryId={}, queryType={}, queryText={}, importCt={}",
+                            username, feedId, queryId, queryType, queryText, importCt.intValue());
                     latch.countDown();
                 } catch (Exception e) {
-                    log.error("Import failure, feedId={}, username={}, queryType={}, queryText={} due to: {}", feedId, username, queryType, queryText, e.getMessage());
+                    log.error("Import failure, username={}, feedId={}, queryId={}, queryType={}, queryText={} due to: {}",
+                            username, feedId, queryId, queryType, queryText, e.getMessage());
                 }
             }
 
@@ -281,7 +284,7 @@ public class NewsApiImporter implements Importer {
 
     private static final String NEWS_API_V2_IMPORTER_ID = "NewsApiV2";
 
-    private static Set<StagingPost> importArticleResponse(Long feedId, String query, ArticleResponse articleResponse, String username, Date importTimestamp) throws NoSuchAlgorithmException {
+    private static Set<StagingPost> importArticleResponse(Long feedId, Long queryId, String query, ArticleResponse articleResponse, String username, Date importTimestamp) throws NoSuchAlgorithmException {
         Set<StagingPost> stagingPosts = new HashSet<>();
         MessageDigest md = MessageDigest.getInstance("MD5");
         for (Article a : articleResponse.getArticles()) {
@@ -298,6 +301,7 @@ public class NewsApiImporter implements Importer {
                     NEWS_API_V2_IMPORTER_ID, // importer Id
                     feedId, // feed Id
                     getImporterDesc(query), // importer desc
+                    queryId,
                     objectSrc, // source
                     ofNullable(a.getSource()).map(Source::getName).orElse(null), // source name
                     ofNullable(a.getSource()).map(Source::getUrl).orElse(null), // source name
