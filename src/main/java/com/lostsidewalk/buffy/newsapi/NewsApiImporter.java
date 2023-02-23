@@ -289,8 +289,6 @@ public class NewsApiImporter implements Importer {
         Set<StagingPost> stagingPosts = new HashSet<>();
         MessageDigest md = MessageDigest.getInstance("MD5");
         for (Article a : articleResponse.getArticles()) {
-            // generate source object
-            Serializable objectSrc = getObjectSrc(a);
             // generate contents
             List<ContentObject> articleContents = null;
             String contentStr = a.getContent();
@@ -303,9 +301,6 @@ public class NewsApiImporter implements Importer {
                     feedId, // feed Id
                     getImporterDesc(query), // importer desc
                     queryId,
-                    objectSrc, // source
-                    ofNullable(a.getSource()).map(Source::getName).orElse(null), // source name
-                    ofNullable(a.getSource()).map(Source::getUrl).orElse(null), // source name
                     ContentObject.from("text", a.getTitle()), // post title
                     ContentObject.from("text", a.getDescription()), // post description
                     articleContents, // post_contents
@@ -316,7 +311,7 @@ public class NewsApiImporter implements Importer {
                     a.getUrlToImage(), // post img url
                     // no img transport ident
                     importTimestamp, // import timestamp
-                    computeHash(md, feedId, objectSrc), // post hash
+                    computeHash(md, feedId, getObjectSrc(a)), // post hash
                     username, // post username
                     null, // post comment
                     null, // post rights
