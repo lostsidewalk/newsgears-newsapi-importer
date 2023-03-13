@@ -1,8 +1,7 @@
 package com.lostsidewalk.buffy.newsapi;
 
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public enum NewsApiCountries {
 
@@ -67,15 +66,20 @@ public enum NewsApiCountries {
         this.code = code;
     }
 
-    public static final List<String> allCodes = new ArrayList<>();
+    public static final Map<String, NewsApiCountries> byCode = new HashMap<>();
     static {
         for (NewsApiCountries l : values()) {
-            allCodes.add(l.code);
+            byCode.put(l.code, l);
         }
     }
 
     @SuppressWarnings("unused")
-    public static List<String> codes() {
-        return allCodes;
+    public static Set<String> codes() {
+        return byCode.keySet();
+    }
+
+    @SuppressWarnings("unused")
+    public static NewsApiCountries byCode(String code) {
+        return byCode.get(code);
     }
 }
