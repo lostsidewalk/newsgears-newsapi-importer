@@ -15,6 +15,7 @@ import com.kwabenaberko.newsapilib.models.request.TopHeadlinesRequest;
 import com.kwabenaberko.newsapilib.models.response.ArticleResponse;
 import com.kwabenaberko.newsapilib.models.response.SourcesResponse;
 import com.lostsidewalk.buffy.Importer;
+import com.lostsidewalk.buffy.discovery.FeedDiscoveryInfo;
 import com.lostsidewalk.buffy.post.ContentObject;
 import com.lostsidewalk.buffy.post.PostPerson;
 import com.lostsidewalk.buffy.post.StagingPost;
@@ -112,7 +113,7 @@ public class NewsApiImporter implements Importer {
     //
 
     @Override
-    public ImportResult doImport(List<QueryDefinition> queryDefinitions) {
+    public ImportResult doImport(List<QueryDefinition> queryDefinitions, Map<String, FeedDiscoveryInfo> discoveryCache) {
         Set<StagingPost> importSet = new HashSet<>();
         List<QueryMetrics> queryMetrics = new ArrayList<>(size(queryDefinitions));
         if (this.configProps.getDisabled()) {
